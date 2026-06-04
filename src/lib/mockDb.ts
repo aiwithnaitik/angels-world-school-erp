@@ -18,6 +18,7 @@ export interface UserMock {
 export interface StudentMock {
   id: string;
   admissionNumber: string;
+  rollNo?: string;
   name: string;
   class: string;
   section: string;

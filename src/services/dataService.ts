@@ -132,6 +132,7 @@ export const DataService = {
     emergencyContact: string;
     profileImage?: string;
     admissionNumber?: string;
+    rollNo?: string;
     dateOfBirth?: string;
     dateOfAdmission?: string;
     motherName?: string;
@@ -153,6 +154,7 @@ export const DataService = {
       newStudent = {
         id: 's-' + Math.random().toString(36).substr(2, 9),
         admissionNumber: nextAdmNo,
+        rollNo: data.rollNo || '',
         name: data.name,
         class: data.class,
         section: data.section,
@@ -171,19 +173,6 @@ export const DataService = {
         updatedAt: new Date().toISOString()
       };
       mock.students.push(newStudent);
-
-      // Create a standard blank fee record for new student
-      mock.fees.push({
-        id: 'f-fee-' + Math.random().toString(36).substr(2, 9),
-        studentId: newStudent.id,
-        amount: 15000,
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        paidAmount: 0,
-        balance: 15000,
-        status: 'UNPAID',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
     });
     return newStudent;
   },
@@ -215,8 +204,14 @@ export const DataService = {
   async deleteStudent(id: string) {
     if (isDbAvailable) {
       try {
+        // Manually delete related fee records and attendance first to bypass missing cascade setups on target server DB migrations
+        await prisma.feeRecord.deleteMany({ where: { studentId: id } });
+        await prisma.attendance.deleteMany({ where: { studentId: id } });
         return await prisma.student.delete({ where: { id } });
-      } catch {}
+      } catch (err) {
+        console.error('Failed to delete student in PostgreSQL:', err);
+        throw err;
+      }
     }
     let deleted = false;
     MockDatabase.update((mock) => {
@@ -327,8 +322,16 @@ export const DataService = {
   async deleteTeacher(id: string) {
     if (isDbAvailable) {
       try {
+        const teacher = await prisma.teacher.findUnique({ where: { id } });
+        if (teacher && teacher.userId) {
+          // Deleting linked login account user will automatically cascade delete the teacher profile
+          return await prisma.user.delete({ where: { id: teacher.userId } });
+        }
         return await prisma.teacher.delete({ where: { id } });
-      } catch {}
+      } catch (err) {
+        console.error('Failed to delete teacher in PostgreSQL:', err);
+        throw err;
+      }
     }
     let deleted = false;
     MockDatabase.update((mock) => {
@@ -444,8 +447,16 @@ export const DataService = {
   async deleteStaff(id: string) {
     if (isDbAvailable) {
       try {
+        const staff = await prisma.staff.findUnique({ where: { id } });
+        if (staff && staff.userId) {
+          // Deleting linked login account user will automatically cascade delete the staff profile
+          return await prisma.user.delete({ where: { id: staff.userId } });
+        }
         return await prisma.staff.delete({ where: { id } });
-      } catch {}
+      } catch (err) {
+        console.error('Failed to delete staff in PostgreSQL:', err);
+        throw err;
+      }
     }
     let deleted = false;
     MockDatabase.update((mock) => {
@@ -486,7 +497,14 @@ export const DataService = {
     });
   },
 
-  async createFeeRecord(studentId: string, amount: number, dueDate: Date, remarks?: string) {
+  async createFeeRecord(
+    studentId: string,
+    amount: number,
+    dueDate: Date,
+    remarks?: string,
+    componentName?: string,
+    academicYear?: string
+  ) {
     if (isDbAvailable) {
       try {
         return await prisma.feeRecord.create({
@@ -497,7 +515,9 @@ export const DataService = {
             paidAmount: 0,
             balance: amount,
             status: 'UNPAID',
-            remarks: remarks || ''
+            remarks: remarks || '',
+            componentName: componentName || null,
+            academicYear: academicYear || null
           }
         });
       } catch {}
@@ -513,6 +533,8 @@ export const DataService = {
         balance: amount,
         status: 'UNPAID',
         remarks: remarks || '',
+        componentName: componentName || null,
+        academicYear: academicYear || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -561,6 +583,71 @@ export const DataService = {
           paymentMethod: method,
           remarks: remarks || '',
           receiptNumber: `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          updatedAt: new Date().toISOString()
+        };
+        updated = mock.fees[idx];
+      }
+    });
+    return updated;
+  },
+
+  async deleteFeeRecord(id: string) {
+    if (isDbAvailable) {
+      try {
+        return await prisma.feeRecord.delete({ where: { id } });
+      } catch (err) {
+        console.error('Prisma deleteFeeRecord failed:', err);
+        throw err;
+      }
+    }
+    let deleted = false;
+    MockDatabase.update((mock) => {
+      const idx = mock.fees.findIndex(f => f.id === id);
+      if (idx !== -1) {
+        mock.fees.splice(idx, 1);
+        deleted = true;
+      }
+    });
+    return deleted;
+  },
+
+  async updateFeeRecord(id: string, payload: { amount: number; paidAmount: number; paymentMethod?: string | null; remarks?: string | null; componentName?: string | null }) {
+    const balance = Math.max(0, payload.amount - payload.paidAmount);
+    const status = balance === 0 ? 'PAID' : payload.paidAmount > 0 ? 'PARTIAL' : 'UNPAID';
+
+    if (isDbAvailable) {
+      try {
+        return await prisma.feeRecord.update({
+          where: { id },
+          data: {
+            amount: payload.amount,
+            paidAmount: payload.paidAmount,
+            balance,
+            status: status as any,
+            paymentMethod: payload.paymentMethod || null,
+            remarks: payload.remarks || '',
+            componentName: payload.componentName || null
+          }
+        });
+      } catch (err) {
+        console.error('Prisma updateFeeRecord failed:', err);
+        throw err;
+      }
+    }
+    let updated: any = null;
+    MockDatabase.update((mock) => {
+      const idx = mock.fees.findIndex(f => f.id === id);
+      if (idx !== -1) {
+        const item = mock.fees[idx];
+        mock.fees[idx] = {
+          ...item,
+          amount: payload.amount,
+          paidAmount: payload.paidAmount,
+          balance,
+          status: status as any,
+          paymentMethod: payload.paymentMethod || undefined,
+          remarks: payload.remarks || '',
+          componentName: payload.componentName || undefined,
           updatedAt: new Date().toISOString()
         };
         updated = mock.fees[idx];
@@ -803,6 +890,89 @@ export const DataService = {
         .sort((a, b) => a.sequence - b.sequence)
         .map(c => ({ ...c, createdAt: new Date(c.createdAt), updatedAt: new Date(c.updatedAt) }))
     };
+  },
+
+  async upsertFeeStructure(data: {
+    class: string;
+    studentType: string;
+    academicYear: string;
+    totalFees: number;
+    admissionFee: number;
+    components: { name: string; amount: number; dueMonth: string; sequence: number }[];
+  }) {
+    if (isDbAvailable) {
+      try {
+        const existing = await prisma.feeStructure.findUnique({
+          where: {
+            class_studentType_academicYear: {
+              class: data.class,
+              studentType: data.studentType,
+              academicYear: data.academicYear
+            }
+          }
+        });
+
+        if (existing) {
+          await prisma.feeStructure.delete({ where: { id: existing.id } });
+        }
+
+        return await prisma.feeStructure.create({
+          data: {
+            class: data.class,
+            studentType: data.studentType,
+            academicYear: data.academicYear,
+            totalFees: data.totalFees,
+            admissionFee: data.admissionFee,
+            components: {
+              create: data.components
+            }
+          },
+          include: { components: true }
+        });
+      } catch (err) {
+        console.error('Prisma upsertFeeStructure failed:', err);
+      }
+    }
+
+    let result: any = null;
+    MockDatabase.update((mock) => {
+      if (!mock.feeStructures) mock.feeStructures = [];
+      const idx = mock.feeStructures.findIndex(fs => 
+        fs.class === data.class && 
+        fs.studentType === data.studentType && 
+        fs.academicYear === data.academicYear
+      );
+
+      const id = idx !== -1 ? mock.feeStructures[idx].id : 'fs-' + Math.random().toString(36).substr(2, 9);
+      const newStructure = {
+        id,
+        class: data.class,
+        studentType: data.studentType,
+        academicYear: data.academicYear,
+        totalFees: data.totalFees,
+        admissionFee: data.admissionFee,
+        components: data.components.map(c => ({
+          id: 'fc-' + Math.random().toString(36).substr(2, 9),
+          feeStructureId: id,
+          name: c.name,
+          amount: c.amount,
+          dueMonth: c.dueMonth,
+          sequence: c.sequence,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (idx !== -1) {
+        mock.feeStructures[idx] = newStructure;
+      } else {
+        mock.feeStructures.push(newStructure);
+      }
+      result = newStructure;
+    });
+    return result;
   },
 
   async createLog(action: string, details: string, userId?: string) {

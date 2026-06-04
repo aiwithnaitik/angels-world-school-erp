@@ -22,3 +22,42 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to fetch fee structures' }, { status: 500 });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    // 1. Authorize session (Admin/Accountant only)
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+    const session = token ? verifyToken(token) : null;
+    if (!session || (session.role !== 'ADMIN' && session.role !== 'ACCOUNTANT')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { class: className, studentType, academicYear, totalFees, admissionFee, components } = body;
+
+    if (!className || !studentType || !academicYear || totalFees === undefined || !Array.isArray(components)) {
+      return NextResponse.json({ error: 'Invalid fee package payload' }, { status: 400 });
+    }
+
+    const structure = await DataService.upsertFeeStructure({
+      class: className,
+      studentType,
+      academicYear,
+      totalFees,
+      admissionFee: admissionFee || 0,
+      components
+    });
+
+    await DataService.createLog(
+      'UPSERT_FEE_STRUCTURE',
+      `Upserted fee package structure for ${className} (${studentType}) for year ${academicYear} with total fee ${totalFees} by ${session.name}`,
+      session.id
+    );
+
+    return NextResponse.json({ success: true, structure });
+  } catch (error) {
+    console.error('Fee structure POST API error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

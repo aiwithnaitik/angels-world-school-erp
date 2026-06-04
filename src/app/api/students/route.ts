@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 
 const studentCreateSchema = z.object({
   admissionNumber: z.string().optional().or(z.literal('')),
+  rollNo: z.string().optional().or(z.literal('')),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   class: z.string().min(1, 'Class is required'),
   section: z.string().min(1, 'Section is required'),

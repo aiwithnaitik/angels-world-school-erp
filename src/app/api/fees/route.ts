@@ -15,7 +15,9 @@ const feeCreateSchema = z.object({
   studentId: z.string().min(1, 'Student ID is required'),
   amount: z.number().positive('Fee amount must be greater than zero'),
   dueDate: z.string().min(1, 'Due date is required'),
-  remarks: z.string().optional()
+  remarks: z.string().optional(),
+  componentName: z.string().optional(),
+  academicYear: z.string().optional()
 });
 
 export async function GET(request: Request) {
@@ -72,8 +74,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Validation failed', fields: validation.error.flatten().fieldErrors }, { status: 400 });
       }
 
-      const { studentId, amount, dueDate, remarks } = validation.data;
-      const newRecord = await DataService.createFeeRecord(studentId, amount, new Date(dueDate), remarks);
+      const { studentId, amount, dueDate, remarks, componentName, academicYear } = validation.data;
+      const newRecord = await DataService.createFeeRecord(studentId, amount, new Date(dueDate), remarks, componentName, academicYear);
       
       const students = await DataService.getStudents();
       const student = students.find(s => s.id === studentId);

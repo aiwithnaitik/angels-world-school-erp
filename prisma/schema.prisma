@@ -46,6 +46,7 @@ model User {
 model Student {
   id              String   @id @default(uuid())
   admissionNumber String   @unique
+  rollNo          String?
   name            String
   class           String
   section         String

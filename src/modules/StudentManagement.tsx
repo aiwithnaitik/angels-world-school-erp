@@ -28,6 +28,7 @@ import Papa from 'papaparse';
 interface Student {
   id: string;
   admissionNumber: string;
+  rollNo?: string;
   name: string;
   class: string;
   section: string;
@@ -46,7 +47,24 @@ interface Student {
 
 type StudentImportRow = Record<string, unknown>;
 
-const REQUIRED_IMPORT_HEADERS = 'name, class, section, parentName, parentPhone, address, emergencyContact';
+const REQUIRED_IMPORT_HEADERS = 'Name, Class, Section, Parent Name, Parent Phone, Address, Emergency Phone';
+
+const CLASS_SECTION_MAP: Record<string, string[]> = {
+  'Pre Nursery': ['A'],
+  'Nursery': ['A'],
+  'LKG': ['A', 'B'],
+  'UKG': ['A', 'B'],
+  'Class 1': ['A', 'B'],
+  'Class 2': ['A', 'B'],
+  'Class 3': ['A', 'B'],
+  'Class 4': ['A', 'B'],
+  'Class 5': ['A', 'B'],
+  'Class 6': ['A', 'B'],
+  'Class 7': ['A'],
+  'Class 8': ['A'],
+  'Class 9': ['A', 'B'],
+  'Class 10': ['A']
+};
 
 const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -192,6 +210,8 @@ export default function StudentManagement() {
 
   // Form Fields
   const [formData, setFormData] = useState({
+    admissionNumber: '',
+    rollNo: '',
     name: '',
     class: 'Class 7',
     section: 'A',
@@ -261,6 +281,8 @@ export default function StudentManagement() {
   const handleOpenAddModal = () => {
     setCurrentStudent(null);
     setFormData({
+      admissionNumber: '',
+      rollNo: '',
       name: '',
       class: 'Class 7',
       section: 'A',
@@ -281,6 +303,8 @@ export default function StudentManagement() {
   const handleOpenEditModal = (student: Student) => {
     setCurrentStudent(student);
     setFormData({
+      admissionNumber: student.admissionNumber || '',
+      rollNo: student.rollNo || '',
       name: student.name,
       class: student.class,
       section: student.section,
@@ -311,13 +335,12 @@ export default function StudentManagement() {
     // Validate client-side
     const errors: Record<string, string> = {};
     if (!formData.name.trim()) errors.name = 'Name is required';
-    if (!formData.parentName.trim()) errors.parentName = 'Parent name is required';
-    if (!/^\d{10}$/.test(formData.parentPhone)) errors.parentPhone = 'Must be exactly 10 digits';
-    if (!formData.address.trim()) errors.address = 'Address is required';
-    if (!/^\d{10}$/.test(formData.emergencyContact)) errors.emergencyContact = 'Must be exactly 10 digits';
-    if (formData.parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.parentEmail)) {
-      errors.parentEmail = 'Invalid email address';
+    if (!/^\d{10}$/.test(formData.parentPhone)) errors.parentPhone = 'Contact No must be exactly 10 digits';
+    if (formData.emergencyContact.trim() && !/^\d{10}$/.test(formData.emergencyContact)) {
+      errors.emergencyContact = 'Emergency Contact No must be exactly 10 digits';
     }
+    if (!formData.dateOfBirth.trim()) errors.dateOfBirth = 'DOB is required';
+    if (!formData.address.trim()) errors.address = 'Residential Address is required';
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -362,7 +385,15 @@ export default function StudentManagement() {
 
   // Delete Student
   const handleDeleteStudent = async (student: Student) => {
-    if (!confirm(`Are you absolutely sure you want to permanently delete student ${student.name} (${student.admissionNumber})? This will delete all fee history and attendance.`)) {
+    let confirmed = false;
+    try {
+      confirmed = window.confirm(`Are you absolutely sure you want to permanently delete student ${student.name} (${student.admissionNumber})? This will delete all fee history and attendance.`);
+    } catch (e) {
+      console.warn("window.confirm blocked, bypassing confirmation check:", e);
+      confirmed = true;
+    }
+
+    if (!confirmed) {
       return;
     }
 
@@ -398,7 +429,15 @@ export default function StudentManagement() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Are you absolutely sure you want to permanently delete the ${selectedIds.length} selected students? This will delete all their records, attendance, and fee history.`)) {
+    let confirmed = false;
+    try {
+      confirmed = window.confirm(`Are you absolutely sure you want to permanently delete the ${selectedIds.length} selected students? This will delete all their records, attendance, and fee history.`);
+    } catch (e) {
+      console.warn("window.confirm blocked, bypassing confirmation check:", e);
+      confirmed = true;
+    }
+
+    if (!confirmed) {
       return;
     }
 
@@ -515,99 +554,40 @@ export default function StudentManagement() {
     setImporting(true);
     const extension = file.name.split('.').pop()?.toLowerCase();
 
-    if (extension !== 'xlsx') {
-      showToast('Only XLSX files are supported', 'error');
+    if (extension !== 'csv') {
+      showToast('Only CSV files are supported', 'error');
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    try {
-      const XLSX = await import('xlsx');
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-      
-      if (!workbook.SheetNames.length) {
-        showToast('XLSX file has no sheets', 'error');
-        setImporting(false);
-        return;
-      }
-      
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const range = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
-      
-      if (!range || range.length === 0) {
-        showToast('No data found in XLSX file', 'error');
-        setImporting(false);
-        return;
-      }
-
-      // Detect header row helper
-      const isHeaderRow = (row: any[]) => {
-        if (!row || row.length === 0) return false;
-        const headersLower = row.map(cell => 
-          cell === null || cell === undefined ? '' : String(cell).toLowerCase().trim().replace(/[^a-z]/g, '')
-        );
-        
-        const hasSrNo = headersLower.some(h => h === 'srno' || h === 'sno' || h === 'sr' || h === 'serialno');
-        const hasStudent = headersLower.some(h => 
-          h === 'studentname' || h === 'studentsname' || h === 'nameofstudent' || h === 'student' || h === 'name'
-        );
-        const hasFather = headersLower.some(h => 
-          h === 'fathername' || h === 'fathersname' || h === 'parentname' || h === 'father'
-        );
-        
-        return (hasSrNo && hasStudent) || (hasStudent && hasFather);
-      };
-
-      let activeHeaders: string[] | null = null;
-      const jsonData: StudentImportRow[] = [];
-
-      for (let i = 0; i < range.length; i++) {
-        const row = range[i];
-        if (!row) continue;
-        
-        if (isHeaderRow(row)) {
-          activeHeaders = row.map(h => h === null || h === undefined ? '' : String(h).trim());
-          console.log(`Detected new headers at row ${i}:`, activeHeaders);
-          continue;
-        }
-        
-        if (!activeHeaders) continue;
-
-        const isEmpty = row.every(cell => 
-          cell === null || cell === undefined || String(cell).trim() === ''
-        );
-        if (isEmpty) continue;
-
-        // Skip section divider titles (usually has only 1 non-empty cell)
-        const nonEmptyCells = row.filter(cell => 
-          cell !== null && cell !== undefined && String(cell).trim() !== ''
-        );
-        if (nonEmptyCells.length <= 1) continue;
-
-        const obj: StudentImportRow = {};
-        activeHeaders.forEach((header, colIdx) => {
-          if (header) {
-            obj[header] = row[colIdx] === undefined || row[colIdx] === null ? '' : row[colIdx];
+    Papa.parse<StudentImportRow>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          if (results.errors && results.errors.length > 0) {
+            console.warn('CSV parsing warnings/errors:', results.errors);
           }
-        });
-        jsonData.push(obj);
-      }
-      
-      console.log(`Multi-section parser found ${jsonData.length} mapped rows.`);
-      
-      if (jsonData && jsonData.length > 0) {
-        await importStudentRows(jsonData);
-      } else {
-        showToast('No valid data rows found in XLSX file', 'error');
+          const rows = results.data;
+          if (!rows || rows.length === 0) {
+            showToast('No data found in CSV file', 'error');
+            setImporting(false);
+            return;
+          }
+          await importStudentRows(rows);
+        } catch (error: any) {
+          console.error('CSV Import Error:', error);
+          showToast('Error importing CSV file: ' + (error.message || 'Unknown error'), 'error');
+          setImporting(false);
+        }
+      },
+      error: (error) => {
+        console.error('PapaParse Error:', error);
+        showToast('Error parsing CSV file: ' + error.message, 'error');
         setImporting(false);
       }
-    } catch (error: any) {
-      console.error('XLSX Parse Error:', error);
-      showToast('Error parsing XLSX file: ' + (error.message || 'Unknown error'), 'error');
-      setImporting(false);
-    }
+    });
   };
 
   const handleSpreadsheetImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -726,10 +706,9 @@ export default function StudentManagement() {
               className="bg-transparent text-xs font-semibold text-slate-700 outline-hidden cursor-pointer"
             >
               <option value="">All Classes</option>
-              <option value="Class 5">Class 5</option>
-              <option value="Class 6">Class 6</option>
-              <option value="Class 7">Class 7</option>
-              <option value="Class 8">Class 8</option>
+              {Object.keys(CLASS_SECTION_MAP).map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -798,7 +777,8 @@ export default function StudentManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-800 tracking-tight">
-                      {student.admissionNumber}
+                       <div>{student.admissionNumber}</div>
+                       {student.rollNo && <span className="text-[10px] text-slate-400 font-semibold block">Roll No: {student.rollNo}</span>}
                     </td>
                     <td className="px-6 py-4">
                       <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg font-bold">
@@ -875,6 +855,32 @@ export default function StudentManagement() {
             {/* Modal Form Scroll Area */}
             <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Admission No */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Admission No (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.admissionNumber}
+                    onChange={(e) => setFormData({ ...formData, admissionNumber: e.target.value })}
+                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+                    placeholder="e.g. AWS-2026-0001"
+                  />
+                  {formErrors.admissionNumber && <span className="text-[10px] text-red-500 font-semibold">{formErrors.admissionNumber}</span>}
+                </div>
+
+                {/* Roll No */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Roll No (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.rollNo}
+                    onChange={(e) => setFormData({ ...formData, rollNo: e.target.value })}
+                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+                    placeholder="e.g. 15"
+                  />
+                  {formErrors.rollNo && <span className="text-[10px] text-red-500 font-semibold">{formErrors.rollNo}</span>}
+                </div>
+
                 {/* Student Name */}
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Student Name</label>
@@ -894,13 +900,20 @@ export default function StudentManagement() {
                   <label className="text-xs font-bold text-slate-500 uppercase">Class</label>
                   <select
                     value={formData.class}
-                    onChange={(e) => setFormData({ ...formData, class: e.target.value })}
+                    onChange={(e) => {
+                      const newClass = e.target.value;
+                      const allowedSections = CLASS_SECTION_MAP[newClass] || ['Single'];
+                      setFormData({ 
+                        ...formData, 
+                        class: newClass,
+                        section: allowedSections.includes(formData.section) ? formData.section : allowedSections[0]
+                      });
+                    }}
                     className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 cursor-pointer focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
                   >
-                    <option value="Class 5">Class 5</option>
-                    <option value="Class 6">Class 6</option>
-                    <option value="Class 7">Class 7</option>
-                    <option value="Class 8">Class 8</option>
+                    {Object.keys(CLASS_SECTION_MAP).map(cls => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -912,70 +925,27 @@ export default function StudentManagement() {
                     onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                     className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 cursor-pointer focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
                   >
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
+                    {(CLASS_SECTION_MAP[formData.class] || ['Single']).map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
                   </select>
                 </div>
 
-                {/* Parent Name */}
+                {/* Fathers Name */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Parent Name</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Fathers Name (Optional)</label>
                   <input
                     type="text"
-                    required
                     value={formData.parentName}
                     onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
                     className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
                     placeholder="Ramesh Sharma"
                   />
-                  {formErrors.parentName && <span className="text-[10px] text-red-500 font-semibold">{formErrors.parentName}</span>}
-                </div>
-
-                {/* Parent Phone */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Parent Phone</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.parentPhone}
-                    onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value })}
-                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                    placeholder="9876543210"
-                  />
-                  {formErrors.parentPhone && <span className="text-[10px] text-red-500 font-semibold">{formErrors.parentPhone}</span>}
-                </div>
-
-                {/* Parent Email */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Parent Email (Optional)</label>
-                  <input
-                    type="email"
-                    value={formData.parentEmail}
-                    onChange={(e) => setFormData({ ...formData, parentEmail: e.target.value })}
-                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                    placeholder="parent@example.com"
-                  />
-                  {formErrors.parentEmail && <span className="text-[10px] text-red-500 font-semibold">{formErrors.parentEmail}</span>}
-                </div>
-
-                {/* Emergency Contact */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Emergency Contact No.</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.emergencyContact}
-                    onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
-                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
-                    placeholder="9876543211"
-                  />
-                  {formErrors.emergencyContact && <span className="text-[10px] text-red-500 font-semibold">{formErrors.emergencyContact}</span>}
                 </div>
 
                 {/* Mother's Name */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Mother's Name (Optional)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Mother Name (Optional)</label>
                   <input
                     type="text"
                     value={formData.motherName}
@@ -987,24 +957,54 @@ export default function StudentManagement() {
 
                 {/* Date of Birth */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Date of Birth (Optional)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">DOB (Required)</label>
                   <input
                     type="date"
+                    required
                     value={formData.dateOfBirth}
                     onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
                     className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden text-slate-700"
                   />
+                  {formErrors.dateOfBirth && <span className="text-[10px] text-red-500 font-semibold">{formErrors.dateOfBirth}</span>}
                 </div>
 
-                {/* Date of Admission */}
+                {/* Contact No */}
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Date of Admission (Optional)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Contact No</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.parentPhone}
+                    onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value })}
+                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+                    placeholder="9876543210"
+                  />
+                  {formErrors.parentPhone && <span className="text-[10px] text-red-500 font-semibold">{formErrors.parentPhone}</span>}
+                </div>
+
+                {/* Emergency Contact No */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Emergency Contact No (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.emergencyContact}
+                    onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
+                    className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+                    placeholder="9876543211"
+                  />
+                  {formErrors.emergencyContact && <span className="text-[10px] text-red-500 font-semibold">{formErrors.emergencyContact}</span>}
+                </div>
+
+                {/* DO Admission */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">DO Admission (Optional)</label>
                   <input
                     type="date"
                     value={formData.dateOfAdmission}
                     onChange={(e) => setFormData({ ...formData, dateOfAdmission: e.target.value })}
                     className="block w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:outline-hidden text-slate-700"
                   />
+                  {formErrors.dateOfAdmission && <span className="text-[10px] text-red-500 font-semibold">{formErrors.dateOfAdmission}</span>}
                 </div>
 
                 {/* Date of Deactivation */}
@@ -1194,7 +1194,7 @@ export default function StudentManagement() {
                 </div>
                 <div className="space-y-1">
                   <p className="font-bold text-slate-700 text-sm">
-                    {isDragging ? 'Drop XLSX file here' : 'Drag & drop your XLSX file'}
+                    {isDragging ? 'Drop CSV file here' : 'Drag & drop your CSV file'}
                   </p>
                   <p className="text-[10px] text-slate-400">or click to browse from device</p>
                 </div>
@@ -1206,14 +1206,14 @@ export default function StudentManagement() {
                   <span>Important Instructions</span>
                 </div>
                 <p className="text-[10px] text-amber-700/90 leading-relaxed">
-                  Only <strong>.xlsx</strong> files are supported. Missing optional fields will automatically be placed as blanks in ERP, and rows without a student name are skipped.<br />
+                  Only <strong>.csv</strong> files are supported. Missing optional fields will automatically be placed as blanks in ERP, and rows without a student name are skipped.<br />
                   Required header fields: <span className="font-mono text-primary-600 font-bold block mt-1">{REQUIRED_IMPORT_HEADERS}</span>
                 </p>
               </div>
 
               <input
                 type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".csv,text/csv"
                 onChange={handleSpreadsheetImport}
                 ref={fileInputRef}
                 disabled={importing}
@@ -1223,7 +1223,7 @@ export default function StudentManagement() {
               {importing && (
                 <div className="flex items-center justify-center gap-2.5 text-primary-600 font-bold mt-2 bg-primary-50/50 py-3 rounded-2xl border border-primary-100 animate-pulse">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Parsing spreadsheet, registering students...
+                  Parsing CSV, registering students...
                 </div>
               )}
 

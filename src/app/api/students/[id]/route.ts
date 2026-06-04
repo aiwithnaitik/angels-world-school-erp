@@ -8,6 +8,7 @@ const studentUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   class: z.string().min(1).optional(),
   section: z.string().min(1).optional(),
+  rollNo: z.string().optional().or(z.literal('')),
   parentName: z.string().optional().or(z.literal('')),
   parentPhone: z.string().optional().or(z.literal('')).refine(val => !val || /^\d+$/.test(val), 'Parent phone must contain only digits'),
   parentEmail: z.string().email().optional().or(z.literal('')),

@@ -24,6 +24,23 @@ interface AttendanceRecord {
   marked: boolean;
 }
 
+const CLASS_SECTION_MAP: Record<string, string[]> = {
+  'Pre Nursery': ['A'],
+  'Nursery': ['A'],
+  'LKG': ['A', 'B'],
+  'UKG': ['A', 'B'],
+  'Class 1': ['A', 'B'],
+  'Class 2': ['A', 'B'],
+  'Class 3': ['A', 'B'],
+  'Class 4': ['A', 'B'],
+  'Class 5': ['A', 'B'],
+  'Class 6': ['A', 'B'],
+  'Class 7': ['A'],
+  'Class 8': ['A'],
+  'Class 9': ['A', 'B'],
+  'Class 10': ['A']
+};
+
 export default function AttendanceSystem() {
   const { user } = useAuth();
   
@@ -183,13 +200,17 @@ export default function AttendanceSystem() {
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-500">
               <select
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={(e) => {
+                  const newClass = e.target.value;
+                  const allowedSections = CLASS_SECTION_MAP[newClass] || ['Single'];
+                  setSelectedClass(newClass);
+                  setSelectedSection(allowedSections.includes(selectedSection) ? selectedSection : allowedSections[0]);
+                }}
                 className="bg-transparent text-xs font-semibold text-slate-700 outline-hidden cursor-pointer"
               >
-                <option value="Class 5">Class 5</option>
-                <option value="Class 6">Class 6</option>
-                <option value="Class 7">Class 7</option>
-                <option value="Class 8">Class 8</option>
+                {Object.keys(CLASS_SECTION_MAP).map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -203,9 +224,9 @@ export default function AttendanceSystem() {
                 onChange={(e) => setSelectedSection(e.target.value)}
                 className="bg-transparent text-xs font-semibold text-slate-700 outline-hidden cursor-pointer"
               >
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
+                {(CLASS_SECTION_MAP[selectedClass] || ['Single']).map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
               </select>
             </div>
           </div>
