@@ -7,7 +7,7 @@ export async function POST() {
     // Clear JWT Cookie
     response.cookies.set('token', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'strict',
       maxAge: 0,
       path: '/'

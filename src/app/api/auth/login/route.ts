@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     response.cookies.set('token', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to false to support direct HTTP IP access (otherwise cookie is rejected)
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
       path: '/'
