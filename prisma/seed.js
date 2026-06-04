@@ -45,11 +45,25 @@ async function main() {
     });
   }
 
+
+
   // 4. Seed Students
   if (data.students && data.students.length > 0) {
-    console.log(`Seeding ${data.students.length} Students...`);
+    const seenAdmissionNumbers = new Set();
+    const uniqueStudents = [];
+    for (const s of data.students) {
+      if (!s.admissionNumber) continue;
+      if (seenAdmissionNumbers.has(s.admissionNumber)) {
+        continue;
+      }
+      seenAdmissionNumbers.add(s.admissionNumber);
+      uniqueStudents.push(s);
+    }
+
+    console.log(`Seeding ${uniqueStudents.length} unique Students (skipped ${data.students.length - uniqueStudents.length} duplicates)...`);
+    
     await prisma.student.createMany({
-      data: data.students.map(s => ({
+      data: uniqueStudents.map(s => ({
         id: s.id,
         admissionNumber: s.admissionNumber,
         name: s.name,
