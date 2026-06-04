@@ -184,11 +184,14 @@ async function main() {
   // 9. Seed Fee Records
   if (data.fees && data.fees.length > 0) {
     console.log(`Seeding ${data.fees.length} Fee Records...`);
-    // Due to scale, createMany is much faster here
+    const validStudentIds = new Set(uniqueStudents.map(s => s.id));
+    const filteredFees = data.fees.filter(f => validStudentIds.has(f.studentId));
+    console.log(`Inserting ${filteredFees.length} valid Fee Records (skipped ${data.fees.length - filteredFees.length} referencing skipped/missing students)...`);
+
     const batches = [];
     const batchSize = 1000;
     
-    const formattedFees = data.fees.map(f => ({
+    const formattedFees = filteredFees.map(f => ({
       id: f.id,
       studentId: f.studentId,
       amount: f.amount,
@@ -218,10 +221,14 @@ async function main() {
   // 10. Seed Attendance Records
   if (data.attendance && data.attendance.length > 0) {
     console.log(`Seeding ${data.attendance.length} Attendance Records...`);
+    const validStudentIds = new Set(uniqueStudents.map(s => s.id));
+    const filteredAttendance = data.attendance.filter(a => validStudentIds.has(a.studentId));
+    console.log(`Inserting ${filteredAttendance.length} valid Attendance Records (skipped ${data.attendance.length - filteredAttendance.length} referencing skipped/missing students)...`);
+
     const batches = [];
     const batchSize = 1000;
 
-    const formattedAttendance = data.attendance.map(a => ({
+    const formattedAttendance = filteredAttendance.map(a => ({
       id: a.id,
       date: new Date(a.date),
       status: a.status,
