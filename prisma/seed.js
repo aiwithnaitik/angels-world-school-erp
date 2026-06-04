@@ -47,10 +47,11 @@ async function main() {
 
 
 
+  let uniqueStudents = [];
+
   // 4. Seed Students
   if (data.students && data.students.length > 0) {
     const seenAdmissionNumbers = new Set();
-    const uniqueStudents = [];
     for (const s of data.students) {
       if (!s.admissionNumber) continue;
       if (seenAdmissionNumbers.has(s.admissionNumber)) {
