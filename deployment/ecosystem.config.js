@@ -2,11 +2,10 @@ module.exports = {
   apps: [
     {
       name: 'angels-world-erp',
-      script: 'npm',
-      args: 'start',
+      script: './.next/standalone/server.js',
       cwd: process.cwd(),
-      instances: 1,
-      exec_mode: 'fork',
+      instances: 'max',
+      exec_mode: 'cluster',
       watch: false,
       max_memory_restart: '800M',
       env: {
