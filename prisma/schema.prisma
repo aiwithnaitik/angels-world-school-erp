@@ -1,0 +1,200 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  ACCOUNTANT
+  STAFF
+}
+
+enum FeeStatus {
+  PAID
+  UNPAID
+  PARTIAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(STAFF)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher   Teacher?
+  staff     Staff?
+  logs      SystemLog[]
+
+  @@index([email])
+}
+
+model Student {
+  id              String   @id @default(uuid())
+  admissionNumber String   @unique
+  name            String
+  class           String
+  section         String
+  parentName      String
+  parentPhone     String
+  parentEmail     String?
+  address         String
+  emergencyContact String
+  profileImage    String?
+  dateOfBirth     String?
+  dateOfAdmission String?
+  motherName      String?
+  dateOfDeactivation String?
+  status          String   @default("ACTIVE") // ACTIVE, SUSPENDED, GRADUATED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  fees            FeeRecord[]
+  attendance      Attendance[]
+
+  @@index([class, section])
+  @@index([admissionNumber])
+}
+
+model Teacher {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String
+  subjects     String[] // e.g., ["Mathematics", "Physics"]
+  classes      String[] // e.g., ["Class 7-A", "Class 8-B"]
+  profileImage String?
+  userId       String?  @unique
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+}
+
+model Staff {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String
+  roleName     String   // e.g., "Accountant", "Librarian", "Receptionist"
+  permissions  String[] // e.g., ["manage_fees", "view_reports"]
+  userId       String?  @unique
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+}
+
+model FeeStructure {
+  id                String   @id @default(uuid())
+  class             String   // e.g., "NUR/KG", "1ST/2ND/3RD", "4TH/5TH", etc.
+  studentType       String   // "NEW" or "OLD"
+  academicYear      String   // e.g., "2026-27"
+  totalFees         Float    // Total annual fees
+  admissionFee      Float    @default(0) // Admission/Registration fee (only for new students)
+  components        FeeComponent[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([class, studentType, academicYear])
+}
+
+model FeeComponent {
+  id                String   @id @default(uuid())
+  feeStructureId    String
+  feeStructure      FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+  name              String   // e.g., "APRIL", "AUGUST", "DECEMBER"
+  amount            Float
+  dueMonth          String   // Month when this installment is due
+  sequence          Int      // Order of payment (1, 2, 3, etc.)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([feeStructureId])
+}
+
+model FeeRecord {
+  id            String    @id @default(uuid())
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount        Float
+  dueDate       DateTime
+  paidAmount    Float     @default(0)
+  balance       Float
+  status        FeeStatus @default(UNPAID)
+  paymentDate   DateTime?
+  paymentMethod String?   // Cash, Card, Online, Bank Transfer
+  receiptNumber String?   @unique
+  remarks       String?
+  componentName String?   // e.g., "APRIL", "ADMISSION", "AUGUST"
+  academicYear  String?   // e.g., "2026-27"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([status])
+}
+
+
+model Attendance {
+  id        String           @id @default(uuid())
+  date      DateTime
+  status    AttendanceStatus @default(PRESENT)
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     String
+  section   String
+  markedBy  String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([date, studentId])
+  @@index([studentId])
+  @@index([class, section, date])
+}
+
+model Notice {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  category  String   // General, Event, Holiday, Examination
+  author    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  action    String
+  details   String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

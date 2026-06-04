@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #f0f4ff;
+  --color-primary-100: #e0e9ff;
+  --color-primary-200: #c2d2ff;
+  --color-primary-300: #94afff;
+  --color-primary-400: #5c81ff;
+  --color-primary-500: #0f2963; /* Premium Classic Navy Blue from AWS Shield */
+  --color-primary-600: #0b1e4c; /* Deep Dark Navy */
+  --color-primary-700: #081639;
+  --color-primary-800: #050e26;
+  --color-primary-900: #020714;
+  
+  --color-accent-red: #c8102e;   /* Royal Crimson Red from AWS Ribbon */
+  --color-accent-gold: #f59e0b;  /* Golden Amber from AWS Banner */
+  
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+}
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --primary-color: #0f2963;
+  --sidebar-width: 260px;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print custom utility */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Card hover zoom */
+.hover-card {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -5px rgba(15, 41, 99, 0.06), 0 10px 15px -7px rgba(15, 41, 99, 0.05);
+}
+
+/* Premium Border accents */
+.border-gradient-blue {
+  border-image: linear-gradient(to right, #0f2963, #c8102e) 1;
+}
